@@ -83,7 +83,9 @@ function init_data_files() {
                 'bug' => 'Bug',
                 'feature' => 'Fonctionnalité',
                 'support' => 'Support',
-                'improvement' => 'Amélioration'
+                'improvement' => 'Amélioration',
+                'assignee' => 'Assigné à',
+                'update' => 'Mettre à jour'
             ],
             'en' => [
                 'login' => 'Login',
@@ -114,7 +116,9 @@ function init_data_files() {
                 'bug' => 'Bug',
                 'feature' => 'Feature',
                 'support' => 'Support',
-                'improvement' => 'Improvement'
+                'improvement' => 'Improvement',
+                'assignee' => 'Assigned to',
+                'update' => 'Update'
             ]
         ];
         file_put_contents(LOCALES_FILE, json_encode($locales, JSON_PRETTY_PRINT));
@@ -236,6 +240,7 @@ if ($_POST && isset($_POST['new_issue']) && is_logged_in()) {
             'subject' => sanitize_input($_POST['subject']),
             'description' => sanitize_input($_POST['description']),
             'state' => 'new',
+            'assignee' => sanitize_input($_POST['assignee']),
             'author' => $_SESSION['user'],
             'comments' => [],
             'attachment' => $attachment
@@ -288,6 +293,26 @@ if ($_POST && isset($_POST['update_state']) && is_logged_in()) {
         foreach ($issues as &$issue) {
             if ($issue['id'] == $issue_id) {
                 $issue['state'] = $new_state;
+                break;
+            }
+        }
+        
+        save_data(ISSUES_FILE, $issues);
+        header('Location: ?view=issue&id=' . $issue_id);
+        exit;
+    }
+}
+
+// Handle assignee update
+if ($_POST && isset($_POST['update_assignee']) && is_logged_in()) {
+    if (verify_csrf($_POST['csrf_token'])) {
+        $issues = load_data(ISSUES_FILE);
+        $issue_id = (int)$_POST['issue_id'];
+        $new_assignee = sanitize_input($_POST['assignee']);
+        
+        foreach ($issues as &$issue) {
+            if ($issue['id'] == $issue_id) {
+                $issue['assignee'] = $new_assignee;
                 break;
             }
         }
@@ -394,6 +419,7 @@ $issue_id = $_GET['id'] ?? null;
                                 <th class="px-4 py-2 text-left"><?= t('subject') ?></th>
                                 <th class="px-4 py-2 text-left"><?= t('category') ?></th>
                                 <th class="px-4 py-2 text-left"><?= t('state') ?></th>
+                                <th class="px-4 py-2 text-left"><?= t('assignee') ?></th>
                                 <th class="px-4 py-2 text-left"><?= t('comments') ?></th>
                             </tr>
                         </thead>
@@ -415,6 +441,7 @@ $issue_id = $_GET['id'] ?? null;
                                             <?= t($issue['state']) ?>
                                         </span>
                                     </td>
+                                    <td class="px-4 py-2"><?= $issue['assignee'] ?? '' ?></td>
                                     <td class="px-4 py-2"><?= count($issue['comments']) ?></td>
                                 </tr>
                             <?php endforeach; ?>
@@ -439,23 +466,39 @@ $issue_id = $_GET['id'] ?? null;
                     <div class="bg-white rounded-lg shadow p-6 mb-6">
                         <div class="flex justify-between items-start mb-4">
                             <h2 class="text-2xl font-bold">#<?= $current_issue['id'] ?> - <?= $current_issue['subject'] ?></h2>
-                            <form method="POST" class="flex items-center space-x-2">
-                                <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
-                                <input type="hidden" name="issue_id" value="<?= $current_issue['id'] ?>">
-                                <select name="state" class="px-3 py-1 border rounded">
-                                    <option value="new" <?= $current_issue['state'] === 'new' ? 'selected' : '' ?>><?= t('new') ?></option>
-                                    <option value="in_process" <?= $current_issue['state'] === 'in_process' ? 'selected' : '' ?>><?= t('in_process') ?></option>
-                                    <option value="review" <?= $current_issue['state'] === 'review' ? 'selected' : '' ?>><?= t('review') ?></option>
-                                    <option value="done" <?= $current_issue['state'] === 'done' ? 'selected' : '' ?>><?= t('done') ?></option>
-                                </select>
-                                <button type="submit" name="update_state" class="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600">Update</button>
-                            </form>
+                            <div class="flex space-x-4">
+                                <form method="POST" class="flex items-center space-x-2">
+                                    <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
+                                    <input type="hidden" name="issue_id" value="<?= $current_issue['id'] ?>">
+                                    <label class="text-sm font-bold"><?= t('state') ?>:</label>
+                                    <select name="state" class="px-3 py-1 border rounded">
+                                        <option value="new" <?= $current_issue['state'] === 'new' ? 'selected' : '' ?>><?= t('new') ?></option>
+                                        <option value="in_process" <?= $current_issue['state'] === 'in_process' ? 'selected' : '' ?>><?= t('in_process') ?></option>
+                                        <option value="review" <?= $current_issue['state'] === 'review' ? 'selected' : '' ?>><?= t('review') ?></option>
+                                        <option value="done" <?= $current_issue['state'] === 'done' ? 'selected' : '' ?>><?= t('done') ?></option>
+                                    </select>
+                                    <button type="submit" name="update_state" class="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"><?= t('update') ?></button>
+                                </form>
+                                <form method="POST" class="flex items-center space-x-2">
+                                    <input type="hidden" name="csrf_token" value="<?= csrf_token() ?>">
+                                    <input type="hidden" name="issue_id" value="<?= $current_issue['id'] ?>">
+                                    <label class="text-sm font-bold"><?= t('assignee') ?>:</label>
+                                    <select name="assignee" class="px-3 py-1 border rounded">
+                                        <?php $users = array_keys(load_data(USERS_FILE)); ?>
+                                        <?php foreach ($users as $user): ?>
+                                            <option value="<?= $user ?>" <?= (($current_issue['assignee'] ?? '') === $user) ? 'selected' : '' ?>><?= $user ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <button type="submit" name="update_assignee" class="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"><?= t('update') ?></button>
+                                </form>
+                            </div>
                         </div>
                         <div class="grid grid-cols-2 gap-4 mb-4 text-sm text-gray-600">
                             <div><strong><?= t('date') ?>:</strong> <?= $current_issue['date'] ?></div>
                             <div><strong><?= t('category') ?>:</strong> <?= t($current_issue['category']) ?></div>
                             <div><strong><?= t('author') ?>:</strong> <?= $current_issue['author'] ?></div>
                             <div><strong><?= t('state') ?>:</strong> <?= t($current_issue['state']) ?></div>
+                            <div><strong><?= t('assignee') ?>:</strong> <?= $current_issue['assignee'] ?? '' ?></div>
                         </div>
                         <div class="mb-4">
                             <strong><?= t('description') ?>:</strong>
@@ -538,6 +581,15 @@ $issue_id = $_GET['id'] ?? null;
                         <div class="mb-4">
                             <label class="block text-gray-700 text-sm font-bold mb-2"><?= t('description') ?></label>
                             <textarea name="description" required class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500" rows="6"></textarea>
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-gray-700 text-sm font-bold mb-2"><?= t('assignee') ?></label>
+                            <select name="assignee" required class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:border-blue-500">
+                                <?php $users = array_keys(load_data(USERS_FILE)); ?>
+                                <?php foreach ($users as $user): ?>
+                                    <option value="<?= $user ?>" <?= ($_SESSION['user'] === $user) ? 'selected' : '' ?>><?= $user ?></option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
                         <div class="mb-4">
                             <label class="block text-gray-700 text-sm font-bold mb-2"><?= t('attachment') ?></label>
